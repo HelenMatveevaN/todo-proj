@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // Task - сердце приложения
 type Task struct {
 	ID        int       `db:"id"`
