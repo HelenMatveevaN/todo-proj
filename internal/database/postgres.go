@@ -80,6 +80,23 @@ func GetTasksByStatus(db *pgxpool.Pool, IsDone bool) ([]models.Task, error) {
 	return tasks, nil
 }
 
+func UpdateTaskStatus(db *pgxpool.Pool, id int, IsDone bool) error {
+	query := `UPDATE tasks SET is_done = $1 WHERE id = $2`
+
+	result, err := db.Exec(context.Background(), query, IsDone, id)
+	if err != nil {
+		return fmt.Errorf("не удалось обновить задачу %d: %w", id, err)
+	}
+
+	//проверка: а была ли такая задача?
+	rowAffected := result.RowsAffected()
+	if rowAffected == 0 {
+		return fmt.Errorf("задача с id %d не найдена", id)
+	}
+
+	fmt.Printf("Статус задачи %d изменен на %v\n", id, IsDone)
+	return nil
+}
 
 
 

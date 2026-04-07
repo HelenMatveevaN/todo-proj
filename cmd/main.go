@@ -47,9 +47,14 @@ func main() {
 		log.Println(err)
 	}
 
-	err = database.DeleteTask(dbpool, 1)
+	err = database.DeleteTask(dbpool, 2)
 	if err != nil {
 		log.Println(err)
+	}
+
+	err = database.UpdateTaskStatus(dbpool, 7, true)
+	if err != nil {
+		log.Fatalf("Ошибка% %v", err)
 	}
 
 	tasks, err := database.GetTasks(dbpool)
@@ -59,9 +64,9 @@ func main() {
 
 	fmt.Println("--- Список ваших задач из базы: ---")
 	for _, t := range tasks {
-		status := "X"
+		status := "-"
 		if t.IsDone {
-			status = "OK!"
+			status = "+"
 		}
 		fmt.Printf("[%d] %s %s\n", t.ID, status, t.Title)
 	}
