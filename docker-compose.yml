@@ -6,14 +6,17 @@ services:
       container_name: todo_db
       restart: always
       environment:
-        -POSTGRES_USER=username
-        -POSTGRES_PASSWORD=password
-        -POSTGRES_DB=todo_db
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: password
+        POSTGRES_DB: todo_db
       ports:
-        -"5432:5432"
+        - "5432:5432"
 
     app:
       build: .
       container_name: todo_app
+      restart: on-failure
       depends_on:
-        -DATABASE_URL=postgres://username:password@db:5432/todo_db
+        - db
+      environment:
+        - DATABASE_URL=postgres://postgres:password@db:5432/todo_db
