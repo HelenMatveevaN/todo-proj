@@ -9,6 +9,8 @@ services:
         POSTGRES_USER: postgres
         POSTGRES_PASSWORD: password
         POSTGRES_DB: todo_db
+      volumes:
+        - ./migrations/001_create_tasks.up.sql:/docker-entrypoint-initdb.d/init.sql
       ports:
         - "5432:5432"
 

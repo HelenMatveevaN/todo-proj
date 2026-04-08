@@ -37,12 +37,16 @@ func main() {
 	}
 	defer dbpool.Close()
 
+	//Подключаем http
+	h := &handlers.Handler{Pool: dbpool}
 
 	r := chi.NewRouter()
 	r.Get("/health", handlers.HealthCheck) //Маршрут для проверки
+	r.Get("/tasks", h.GetTasksHandler) //вызов метода через переменную
+	r.Post("/tasks", h.CreateTaskHandler) 
+	
 	fmt.Println("Сервер запущен на :8080")
-	//Запускаем сервер, он будет "висеть" и ждать запросов
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	if err := http.ListenAndServe(":8080", r); err != nil { //Запускаем сервер, он будет "висеть" и ждать запросов
 		log.Fatalf("Ошибка запуска сервера: %v", err)
 	}
 
