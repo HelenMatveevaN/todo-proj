@@ -3,11 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
-	//"log"
-	//"os"
 
 	"github.com/jackc/pgx/v4/pgxpool"
-	//"github.com/joho/godotenv"
 
 	"todo-proj/internal/models"
 )
