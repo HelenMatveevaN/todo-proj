@@ -8,8 +8,8 @@ import (
 	//"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/go-chi/chi/v4"
 
-	//"todo-proj/internal/database"
 	"todo-proj/internal/models"
+	//"todo-proj/internal/database"
 	"todo-proj/internal/service"
 )
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"net/http"
 	"time"
 
@@ -74,43 +76,42 @@ func main() {
 	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
 
 	// 5. ЗАПУСК СЕРВЕРА (это всегда в самом конце)
-	fmt.Println("Сервер запущен на :8080")
-	if err := http.ListenAndServe(":8080", r); err != nil { //Запускаем сервер, он будет "висеть" и ждать запросов
-		log.Fatalf("Ошибка запуска сервера: %v", err)
+	//fmt.Println("Сервер запущен на :8080")
+	//if err := http.ListenAndServe(":8080", r); err != nil { //Запускаем сервер, он будет "висеть" и ждать запросов
+	//	log.Fatalf("Ошибка запуска сервера: %v", err)
+	//}
+
+	//Настраиваем параметры сервера
+	srv := &http.Server {
+		Addr: ":8080",
+		Handler: r,
 	}
 
-	/*
-	//Первоначальный код для отладки
-
-	err = database.CreateTask(dbpool, "Помыть пол через неделю")
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = database.DeleteTask(dbpool, 2)
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = database.UpdateTaskStatus(dbpool, 7, true)
-	if err != nil {
-		log.Fatalf("Ошибка% %v", err)
-	}
-
-	tasks, err := database.GetTasks(dbpool)
-	if err != nil {
-		log.Fatalf("Ошибка% %v", err)
-	}
-
-	fmt.Println("--- Список ваших задач из базы: ---")
-	for _, t := range tasks {
-		status := "-"
-		if t.IsDone {
-			status = "+"
+	//Запускаем сервер в отдельной го-рутине (в фоне),
+	//чтобы он не блокировал основной поток
+	go func() {
+		fmt.Println("Сервер запущен на :8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Ошибка сервера: %v", err)
 		}
-		fmt.Printf("[%d] %s %s\n", t.ID, status, t.Title)
+	}()
+
+	//Канал для прослушивания сигналов прерывания от системы (например, Ctrl+C)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM) // Ждем сигнал прерывания
+
+	<-quit // Здесь программа замирает и ждет сигнала
+	fmt.Println("Завершение работы сервера...")
+
+	// Даем серверу 5 секунд, чтобы завершить текущие запросы
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctxShutdown); err != nil {
+		log.Fatalf("Сервер не смог плавно завершиться: %v", err)
 	}
-	*/
+
+	fmt.Println("Сервер успешно остановлен.")
 }
 
 
