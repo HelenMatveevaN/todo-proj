@@ -14,6 +14,7 @@ import (
 
 	"todo-proj/internal/database"
 	"todo-proj/internal/handlers"
+	"todo-proj/internal/service"
 )
 
 func main() {
@@ -27,7 +28,7 @@ func main() {
 		log.Fatal("DATABASE_URL не задана")
 	}
 
-	// 2. Подключение к БД (сразу делаем Ping)
+	// 2. Подключение к БД
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -47,8 +48,14 @@ func main() {
 		log.Fatalf("Ошибка миграции: %v", err)
 	}
 
+	// Создаем сервис, передаем ему пул
+	taskSvc := service.NewTaskService(dbpool)
+
 	// 4. Настройка роутера
-	h := &handlers.Handler{Pool: dbpool}
+	h := &handlers.Handler{
+		//Pool: dbpool
+		Service: taskSvc,
+	}
 	
 	r := chi.NewRouter()
 	r.Get("/health", handlers.HealthCheck) //Маршрут для проверки

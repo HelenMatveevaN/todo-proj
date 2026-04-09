@@ -2,12 +2,15 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
 	"todo-proj/internal/models"
 )
+
+var ErrEmptyTitle = errors.New("название задачи не может быть пустым")
 
 func CreateTask(db *pgxpool.Pool, title string) error {
 	query := `INSERT INTO tasks (title, is_done) VALUES ($1, false)`

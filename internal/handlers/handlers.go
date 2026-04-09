@@ -5,15 +5,17 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/jackc/pgx/v4/pgxpool"
+	//"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/go-chi/chi/v4"
 
-	"todo-proj/internal/database"
+	//"todo-proj/internal/database"
 	"todo-proj/internal/models"
+	"todo-proj/internal/service"
 )
 
 type Handler struct {
-	Pool *pgxpool.Pool
+	//Pool *pgxpool.Pool
+	Service service.TaskService //зависим от интерфейса
 }
 
 // Старая функция (оставляем ее, полезна для тестов)
@@ -25,9 +27,12 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // Метод структуры Handler
 func (h *Handler) GetTasksHandler(w http.ResponseWriter, r *http.Request) {
-	tasks, err := database.GetTasks(h.Pool)
+	//tasks, err := database.GetTasks(h.Pool)
+
+	//вызываем сервис, а не бд напрямую
+	tasks, err := h.Service.List(r.Context())
 	if err != nil {
-		http.Error(w, "Ошибка базы данных", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -55,9 +60,10 @@ func (h *Handler) CreateTaskHandler (w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := database.CreateTask(h.Pool, newTask.Title)
+	//err := database.CreateTask(h.Pool, newTask.Title)
+	err := h.Service.Create(r.Context(), newTask.Title)
 	if err != nil {
-		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -67,14 +73,14 @@ func (h *Handler) CreateTaskHandler (w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id") // достаем {id} из URL
-
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Неверный ID", http.StatusBadRequest)
 		return
 	}
 
-	err = database.DeleteTask(h.Pool, id)
+	//err = database.DeleteTask(h.Pool, id)
+	err = h.Service.Delete(r.Context(), id)
 	if err != nil {
 		http.Error(w, "Ошибка удаления", http.StatusInternalServerError)
 		return
@@ -99,7 +105,8 @@ func (h *Handler) UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = database.UpdateTaskStatus(h.Pool, id, input.IsDone)
+	//err = database.UpdateTaskStatus(h.Pool, id, input.IsDone)
+	err = h.Service.UpdateStatus(r.Context(), id, input.IsDone)
 	if err != nil {
 		http.Error(w, "Ошибка обновления", http.StatusInternalServerError)
 		return
