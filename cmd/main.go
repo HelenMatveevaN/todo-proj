@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/go-chi/chi/v4"
+	"github.com/go-chi/chi/v4/middleware"
 
 	"todo-proj/internal/database"
 	"todo-proj/internal/handlers"
@@ -60,10 +61,13 @@ func main() {
 	}
 	
 	r := chi.NewRouter()
-	r.Get("/health", handlers.HealthCheck) //Маршрут для проверки
 
-    // Middleware для логов (очень полезно при разработке)
-    // r.Use(middleware.Logger)
+	// Стандартный логгер chi - он будет писать в консоль метод, путь и время ответа
+    r.Use(middleware.Logger)
+    // Восстанавливает сервер после паники, чтобы он не упал совсем
+    r.Use(middleware.Recoverer)
+
+	r.Get("/health", handlers.HealthCheck) //Маршрут для проверки
 	
 	r.Route("/tasks", func(r chi.Router) {
 		r.Get("/", h.GetTasksHandler)
@@ -74,12 +78,6 @@ func main() {
 
 	// Раздаем статику из папки "static"
 	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
-
-	// 5. ЗАПУСК СЕРВЕРА (это всегда в самом конце)
-	//fmt.Println("Сервер запущен на :8080")
-	//if err := http.ListenAndServe(":8080", r); err != nil { //Запускаем сервер, он будет "висеть" и ждать запросов
-	//	log.Fatalf("Ошибка запуска сервера: %v", err)
-	//}
 
 	//Настраиваем параметры сервера
 	srv := &http.Server {
