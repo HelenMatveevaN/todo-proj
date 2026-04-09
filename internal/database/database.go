@@ -48,6 +48,17 @@ func GetTasks(db *pgxpool.Pool) ([]models.Task, error) {
 	return tasks, nil
 }
 
+func GetTaskByID(db *pgxpool.Pool, id int) (models.Task, error) {
+	var t models.Task
+	query := `SELECT id, title, is_done, created_at FROM tasks WHERE id = $1`
+
+	err := db.QueryRow(context.Background(), query, id).Scan(&t.ID, &t.Title, &t.IsDone, &t.CreatedAt)
+	if err != nil {
+		return t, err
+	}
+	return t, nil
+}
+
 func DeleteTask(db *pgxpool.Pool, id int) error {
 	query := `DELETE FROM tasks WHERE id = $1`
 

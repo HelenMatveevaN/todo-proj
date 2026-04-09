@@ -4,9 +4,9 @@ import "time"
 
 // Task - сердце приложения
 type Task struct {
-	ID        int       `db:"id"`
-	Title     string    `db:"title"`
-	Content   string    `db:"content"`
-	IsDone    bool      `db:"is_done"`
-	CreatedAt time.Time `db:"created_at"`
+	ID        int       `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	IsDone    bool      `json:"is_done"`
+	CreatedAt time.Time `json:"created_at"`
 }

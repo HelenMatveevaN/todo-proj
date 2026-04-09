@@ -71,6 +71,7 @@ func main() {
 	
 	r.Route("/tasks", func(r chi.Router) {
 		r.Get("/", h.GetTasksHandler)
+		r.Get("/{id}", h.GetTaskByIDHandler)
 		r.Post("/", h.CreateTaskHandler)
 		r.Delete("/{id}", h.DeleteTaskHandler)
 		r.Patch("/{id}", h.UpdateTaskHandler)

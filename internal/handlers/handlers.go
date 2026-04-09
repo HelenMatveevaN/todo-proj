@@ -44,6 +44,28 @@ func (h *Handler) GetTasksHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(tasks) //превращаем список задач в json
 }
 
+// Получение одной задачи
+func (h *Handler) GetTaskByIDHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id") // Вытаскиваем ID из ссылки
+	id, err := strconv.Atoi(idStr) // Конвертируем "1" в число 1
+	if err != nil {
+		//http.Error(w, "Некорректный ID", http.StatusBadRequest)
+		sendJSONError(w, "Некорректный ID", http.StatusBadRequest)
+		return
+	}
+	
+	//task, err := database.GetTaskByID(h.Pool, id)
+	task, err := h.Service.GetByID(r.Context(), id)
+	if err != nil {
+		//http.Error(w, "Задача не найдена", http.StatusNotFound)
+		sendJSONError(w, "Задача не найдена", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(task)
+}
+
 func (h *Handler) CreateTaskHandler (w http.ResponseWriter, r *http.Request) {
 	var newTask struct {
 		Title string `json:"title"`
@@ -111,9 +133,11 @@ func (h *Handler) UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.Service.UpdateStatus(r.Context(), id, input.IsDone)
 	if err != nil {
 		if err == service.ErrTaskNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound) //Отдаем 404
+			//http.Error(w, err.Error(), http.StatusNotFound) //Отдаем 404
+			sendJSONError(w, err.Error(), http.StatusNotFound) 
 		} else {
-			http.Error(w, "Ошибка сервера", http.StatusInternalServerError)
+			//http.Error(w, "Ошибка сервера", http.StatusInternalServerError)
+			sendJSONError(w, "Ошибка сервера", http.StatusInternalServerError) 
 		}
 		return
 	}

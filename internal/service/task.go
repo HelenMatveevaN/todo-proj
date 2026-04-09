@@ -22,6 +22,7 @@ type TaskService interface {
 	List(ctx context.Context) ([]models.Task, error)
 	Delete(ctx context.Context, id int) error
 	UpdateStatus(ctx context.Context, id int, isDone bool) error
+	GetByID(ctx context.Context, id int) (models.Task, error)
 }
 
 //реализация сервиса
@@ -65,4 +66,8 @@ func (s *taskService) UpdateStatus(ctx context.Context, id int, isDone bool) err
 		return ErrTaskNotFound
 	}
 	return nil
+}
+
+func (s *taskService) GetByID(ctx context.Context, id int) (models.Task, error) {
+	return database.GetTaskByID(s.pool, id)
 }
