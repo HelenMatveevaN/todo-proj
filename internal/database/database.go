@@ -24,7 +24,7 @@ func CreateTask(db *pgxpool.Pool, title string) error {
 // достает все задачи из базу и возвращает их в виде слайса
 func GetTasks(db *pgxpool.Pool) ([]models.Task, error) {
 	//выполняем запрос
-	rows, err := db.Query(context.Background(), "SELECT id, title, is_done FROM tasks")
+	rows, err := db.Query(context.Background(), "SELECT id, title, is_done FROM tasks ORDER BY id DESC")
 	if err != nil {
 		return nil, fmt.Errorf("не удалось получить задачи: %w", err)
 	}

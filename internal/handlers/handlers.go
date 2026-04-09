@@ -50,6 +50,11 @@ func (h *Handler) CreateTaskHandler (w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if newTask.Title == "" {
+		http.Error(w, "Название задачи не может быть пустым", http.StatusBadRequest)
+		return
+	}
+
 	err := database.CreateTask(h.Pool, newTask.Title)
 	if err != nil {
 		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)

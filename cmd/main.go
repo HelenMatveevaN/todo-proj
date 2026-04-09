@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
@@ -27,7 +28,10 @@ func main() {
 	}
 
 	// 2. Подключение к БД (сразу делаем Ping)
-	dbpool, err := pgxpool.Connect(context.Background(), connStr)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	dbpool, err := pgxpool.Connect(ctx, connStr)
 	if err != nil {
 		log.Fatalf("Ошибка подключения к БД: %v", err)
 	}
@@ -58,6 +62,9 @@ func main() {
 		r.Delete("/{id}", h.DeleteTaskHandler)
 		r.Patch("/{id}", h.UpdateTaskHandler)
 	})
+
+	// Раздаем статику из папки "static"
+	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
 
 	// 5. ЗАПУСК СЕРВЕРА (это всегда в самом конце)
 	fmt.Println("Сервер запущен на :8080")
