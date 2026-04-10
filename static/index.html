@@ -46,7 +46,8 @@
     <script>
         async function loadTasks() {
             const r = await fetch('/tasks');
-            const tasks = await r.json() || [];
+            const response = await r.json();
+            const tasks = response.data || []; // Берем данные из поля data
 
             document.getElementById('counter').innerText = tasks.length;
 
@@ -67,24 +68,28 @@
 
         async function addTask() {
             const input = document.getElementById('taskInput');
-            const response = await fetch('/tasks', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ title: input.value })
-            });
+            if (!input.value.trim()) return; // Не отправляем пустые
 
-            const data = await response.json(); // ждем JSON от сервера
+            try {
+                const response = await fetch('/tasks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ title: input.value })
+                });
 
-            if (!response.ok) {
-                //alert("Ошибка: название не может быть пустым!");
-                //Теперь берем текст ошибки из поля data.error
-                showError(data.error || "Что-то пошло не так");
-                return;
-            }
+                if (!response.ok) {
+                    const data = await response.json(); // Читаем ошибку, только если статус плохой
+                    showError(result.error);
+                    return;
+                }
 
-            // ... очистка input и loadTasks()
+            // Если все успешно:
             input.value = '';
-            loadTasks();
+            await loadTasks();
+            } catch (e) {
+                console.error("Ошибка сети или парсинга:", e);
+                showError("Не удалось связаться с сервером");
+            }
         }
 
         // Вспомогательная функция для красивого вывода ошибок

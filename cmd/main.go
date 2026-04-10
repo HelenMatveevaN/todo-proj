@@ -4,118 +4,105 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"net/http"
 	"time"
-
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/joho/godotenv"
-	"github.com/go-chi/chi/v4"
-	"github.com/go-chi/chi/v4/middleware"
 
 	"todo-proj/internal/database"
 	"todo-proj/internal/handlers"
 	"todo-proj/internal/service"
+
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	// 1. Загрузка конфигов
-	if err := godotenv.Load(); err != nil {
-		log.Println("Предупреждение: .env не найден, используем системные переменные")
-	}
+	// 1. Инициализация конфига
+	cfg := loadConfig()
 
-	connStr := os.Getenv("DB_URL")
-	if connStr == "" {
-		log.Fatal("Ошибка: переменная DB_URL не установлена")
-	}
-
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = ":8080" //значение по умолчанию
-	}
-
-	// 2. Подключение к БД
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	dbpool, err := pgxpool.Connect(ctx, connStr)
-	if err != nil {
-		log.Fatalf("Ошибка подключения к БД: %v", err)
-	}
+	// 2. Инициализация БД
+	dbpool := setupDatabase(cfg.dbURL)
 	defer dbpool.Close()
 
-	if err := dbpool.Ping(context.Background()); err != nil {
-		log.Fatalf("База не отвечает: %v", err)
-	}
-	fmt.Println("Успешное подключение к Postgres!")
-
-	// 3. Миграции (создание таблиц)
-	if err = database.InitDatabase(dbpool); err != nil {
-		log.Fatalf("Ошибка миграции: %v", err)
-	}
-
-	// Создаем сервис, передаем ему пул
+	// 3. Сборка слоев приложения
 	taskSvc := service.NewTaskService(dbpool)
+	h := &handlers.Handler{Service: taskSvc}
+	router := handlers.NewRouter(h) // Перенесли настройку chi внутрь
 
-	// 4. Настройка роутера
-	h := &handlers.Handler{
-		//Pool: dbpool
-		Service: taskSvc,
-	}
-	
-	r := chi.NewRouter()
-
-	// Стандартный логгер chi - он будет писать в консоль метод, путь и время ответа
-    r.Use(middleware.Logger)
-    // Восстанавливает сервер после паники, чтобы он не упал совсем
-    r.Use(middleware.Recoverer)
-
-	r.Get("/health", handlers.HealthCheck) //Маршрут для проверки
-	
-	r.Route("/tasks", func(r chi.Router) {
-		r.Get("/", h.GetTasksHandler)
-		r.Get("/{id}", h.GetTaskByIDHandler)
-		r.Post("/", h.CreateTaskHandler)
-		r.Delete("/{id}", h.DeleteTaskHandler)
-		r.Patch("/{id}", h.UpdateTaskHandler)
-	})
-
-	// Раздаем статику из папки "static"
-	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
-
-	//Настраиваем параметры сервера
-	srv := &http.Server {
-		Addr: ":8080",
-		Handler: r,
+	// 4. Запуск сервера
+	srv := &http.Server{
+		Addr:    cfg.port,
+		Handler: router,
 	}
 
-	//Запускаем сервер в отдельной го-рутине (в фоне),
-	//чтобы он не блокировал основной поток
 	go func() {
-		fmt.Println("Сервер запущен на :8080")
+		log.Printf("Сервер запущен на %s", cfg.port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Ошибка сервера: %v", err)
 		}
 	}()
 
-	//Канал для прослушивания сигналов прерывания от системы (например, Ctrl+C)
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM) // Ждем сигнал прерывания
-
-	<-quit // Здесь программа замирает и ждет сигнала
-	fmt.Println("Завершение работы сервера...")
-
-	// Даем серверу 5 секунд, чтобы завершить текущие запросы
-	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctxShutdown); err != nil {
-		log.Fatalf("Сервер не смог плавно завершиться: %v", err)
-	}
-
-	fmt.Println("Сервер успешно остановлен.")
+	// 5. Ожидание завершения (Graceful Shutdown)
+	waitForShutdown(srv)	
 }
 
+// --- Вспомогательные функции для чистоты main ---
+type config struct {
+	dbURL string
+	port  string
+}
 
+func loadConfig() config {
+	if err := godotenv.Load(); err != nil {
+		log.Println("Инфо: .env не найден, используем системные переменные")
+	}
+	
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("Ошибка: DB_URL не установлена")
+	}
+
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = ":8080"
+	}
+	return config{dbURL: dbURL, port: port}
+}
+
+func setupDatabase(connStr string) *pgxpool.Pool {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.Connect(ctx, connStr)
+	if err != nil {
+		log.Fatalf("Критическая ошибка подключения к БД: %v", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("База не отвечает на Ping: %v", err)
+	}
+
+	if err := database.InitDatabase(pool); err != nil {
+		log.Fatalf("Ошибка миграции: %v", err)
+	}
+
+	fmt.Println("Успешное подключение к Postgres!")
+	return pool
+}
+
+func waitForShutdown(srv *http.Server) {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Завершение работы сервера...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Ошибка при остановке: %v", err)
+	}
+	log.Println("Сервер остановлен.")
+}

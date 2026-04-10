@@ -12,22 +12,22 @@ import (
 
 var ErrEmptyTitle = errors.New("название задачи не может быть пустым")
 
-func CreateTask(db *pgxpool.Pool, title string) error {
-	query := `INSERT INTO tasks (title, is_done) VALUES ($1, false)`
+func CreateTask(db *pgxpool.Pool, title string) (models.Task, error) {
+    var t models.Task
+    err := db.QueryRow(context.Background(), 
+        "INSERT INTO tasks (title) VALUES ($1) RETURNING id, title, is_done, created_at", 
+        title).Scan(&t.ID, &t.Title, &t.IsDone, &t.CreatedAt)
 
-	_, err := db.Exec(context.Background(), query, title)
-	if err != nil {
-		return fmt.Errorf("ошибка при создании задачи '%s': %w", title, err)
-	}
-
-	fmt.Printf("Задача '%s' успешно добавлена!\n", title)
-	return nil
+    if err == nil {
+        fmt.Printf("✅ Задача создана: ID=%d, Title=%s\n", t.ID, t.Title)
+    }
+    return t, err
 }
 
 // достает все задачи из базу и возвращает их в виде слайса
 func GetTasks(db *pgxpool.Pool) ([]models.Task, error) {
 	//выполняем запрос
-	rows, err := db.Query(context.Background(), "SELECT id, title, is_done FROM tasks ORDER BY id DESC")
+	rows, err := db.Query(context.Background(), "SELECT id, title, is_done, created_at FROM tasks ORDER BY id DESC")
 	if err != nil {
 		return nil, fmt.Errorf("не удалось получить задачи: %w", err)
 	}
@@ -38,13 +38,14 @@ func GetTasks(db *pgxpool.Pool) ([]models.Task, error) {
 	for rows.Next() {
 		var t models.Task
 		//Scan копирует данные из колонок таблицы в поля структуры
-		err := rows.Scan(&t.ID, &t.Title, &t.IsDone)
+		err := rows.Scan(&t.ID, &t.Title, &t.IsDone, &t.CreatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("ошибка при чтении строки: %w", err)
 		}
 		tasks = append(tasks, t) //добавляем задачу в список
-
 	}
+
+    fmt.Printf("📋 Получен список задач: всего %d шт.\n", len(tasks))
 	return tasks, nil
 }
 
@@ -56,6 +57,8 @@ func GetTaskByID(db *pgxpool.Pool, id int) (models.Task, error) {
 	if err != nil {
 		return t, err
 	}
+
+	fmt.Printf("🔍 Задача выбрана: ID=%d, Title=%s\n", id, t.Title) // Добавили детали в лог
 	return t, nil
 }
 
@@ -88,6 +91,8 @@ func GetTasksByStatus(db *pgxpool.Pool, IsDone bool) ([]models.Task, error) {
 		}
 		tasks = append(tasks, t)
 	}
+
+	fmt.Printf("📂 Фильтрация по статусу (is_done=%v): найдено %d шт.\n", IsDone, len(tasks))
 	return tasks, nil
 }
 

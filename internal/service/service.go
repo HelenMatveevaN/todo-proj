@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 
@@ -14,15 +15,16 @@ var (
 	ErrTitleTooEmpty = errors.New("название задачи не может быть пустым")
 	ErrTitleTooLong = errors.New("название задачи слишком длинное (макс. 100 символов)")
 	ErrTaskNotFound = errors.New("задача не найдена")
+	ErrTaskInvalidTitle = errors.New("пустой заголовок")
 )
 
 //что должен уметь наш сервис?
 type TaskService interface {
-	Create(ctx context.Context, title string) error
 	List(ctx context.Context) ([]models.Task, error)
+	GetByID(ctx context.Context, id int) (models.Task, error)
+	Create(ctx context.Context, title string) (models.Task, error)
 	Delete(ctx context.Context, id int) error
 	UpdateStatus(ctx context.Context, id int, isDone bool) error
-	GetByID(ctx context.Context, id int) (models.Task, error)
 }
 
 //реализация сервиса
@@ -34,14 +36,19 @@ func NewTaskService(pool *pgxpool.Pool) TaskService {
 	return &taskService{pool: pool}
 }
 
-func (s *taskService) Create(ctx context.Context, title string) error {
+func (s *taskService) Create(ctx context.Context, title string) (models.Task, error) {
 	//здесь будет бизнес-логика (валидация, доп.проверки)
 	if title == "" {
-		return ErrTitleTooEmpty //database.ErrEmptyTitle //пример ошибки
+		return models.Task{}, ErrTitleTooEmpty
 	}
+	// Пример для ErrTaskInvalidTitle (например, если в названии только пробелы)
+    if strings.TrimSpace(title) == "" {
+        return models.Task{}, ErrTaskInvalidTitle
+    }
 	if len(title) > 100 {
-		return ErrTitleTooLong
+		return models.Task{}, ErrTitleTooLong
 	}
+
 	return database.CreateTask(s.pool, title)
 }
 

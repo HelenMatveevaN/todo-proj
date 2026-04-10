@@ -2,122 +2,104 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
-	//"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/go-chi/chi/v4"
 
-	"todo-proj/internal/models"
-	//"todo-proj/internal/database"
 	"todo-proj/internal/service"
 )
 
 type Handler struct {
-	//Pool *pgxpool.Pool
 	Service service.TaskService //зависим от интерфейса
 }
 
-// Старая функция (оставляем ее, полезна для тестов)
-func HealthCheck(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("API To-Do приложение работает!"))
+type Response struct {
+	Data  interface{} `json:"data,omitempty"`  // Любые данные (объект или список)
+	Error string      `json:"error,omitempty"` // Текст ошибки
 }
 
-// Метод структуры Handler
-func (h *Handler) GetTasksHandler(w http.ResponseWriter, r *http.Request) {
-	//tasks, err := database.GetTasks(h.Pool)
+// Хелперы для унификации ответов
+func sendJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(Response{Data: data})
+}
 
-	//вызываем сервис, а не бд напрямую
+func sendError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(Response{Error: message})
+}
+
+func HealthCheck(w http.ResponseWriter, r *http.Request) {
+	sendJSON(w, http.StatusOK, "API To-Do приложение работает!")
+}
+
+func (h *Handler) GetTasksHandler(w http.ResponseWriter, r *http.Request) {
 	tasks, err := h.Service.List(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		sendError(w, http.StatusInternalServerError, "Ошибка БД")
 		return
 	}
-
-	if tasks == nil {
-		tasks = []models.Task{}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tasks) //превращаем список задач в json
+	sendJSON(w, http.StatusOK, tasks)
 }
 
-// Получение одной задачи
 func (h *Handler) GetTaskByIDHandler(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id") // Вытаскиваем ID из ссылки
 	id, err := strconv.Atoi(idStr) // Конвертируем "1" в число 1
 	if err != nil {
-		//http.Error(w, "Некорректный ID", http.StatusBadRequest)
-		sendJSONError(w, "Некорректный ID", http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Некорректный ID")
 		return
 	}
 	
-	//task, err := database.GetTaskByID(h.Pool, id)
 	task, err := h.Service.GetByID(r.Context(), id)
 	if err != nil {
-		//http.Error(w, "Задача не найдена", http.StatusNotFound)
-		sendJSONError(w, "Задача не найдена", http.StatusNotFound)
+		sendError(w, http.StatusNotFound, "Задача не найдена")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
+	sendJSON(w, http.StatusOK, task)
 }
 
 func (h *Handler) CreateTaskHandler (w http.ResponseWriter, r *http.Request) {
-	var newTask struct {
-		Title string `json:"title"`
+	var req struct { 
+		Title string `json:"title"` 
 	}
 
-	//декодируем то, что прислал пользователь
-	if err := json.NewDecoder(r.Body).Decode(&newTask); err != nil {
-		http.Error(w, "Некорректный JSON", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "Некорректный JSON")
 		return
 	}
 
-	err := h.Service.Create(r.Context(), newTask.Title)
+	task, err := h.Service.Create(r.Context(), req.Title)
 	if err != nil {
-		// Проверяем, какая именно ошибка произошла
-		switch err {
-		case service.ErrTitleTooEmpty, service.ErrTitleTooLong:
-			//http.Error(w, err.Error(), http.StatusBadRequest) // Ошибка клиента (400)
-			sendJSONError(w, err.Error(), http.StatusBadRequest)
+		// Проверяем конкретные ошибки сервиса
+		switch {
+		case errors.Is(err, service.ErrTitleTooEmpty), errors.Is(err, service.ErrTaskInvalidTitle):
+			// Если заголовок пустой или невалидный — 400 Bad Request
+			sendError(w, http.StatusBadRequest, err.Error())
+		
+		case errors.Is(err, service.ErrTitleTooLong):
+			// Если превышена длина — 400 Bad Request
+			sendError(w, http.StatusBadRequest, err.Error())
+
 		default:
-			//http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError) // Ошибка сервера (500)
-			sendJSONError(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+			// Все остальные ошибки (например, упала база) — 500 Internal Server Error
+			sendError(w, http.StatusInternalServerError, "Внутренняя ошибка сервера")
 		}
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("+ Задача создана"))
-}
-
-func (h *Handler) DeleteTaskHandler(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id") // достаем {id} из URL
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		http.Error(w, "Неверный ID", http.StatusBadRequest)
-		return
-	}
-
-	//err = database.DeleteTask(h.Pool, id)
-	err = h.Service.Delete(r.Context(), id)
-	if err != nil {
-		http.Error(w, "Ошибка удаления", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent) // Успешно, без тела ответа
+	// Если ошибок нет, возвращаем созданную задачу
+	sendJSON(w, http.StatusCreated, task)
 }
 
 func (h *Handler) UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "Неверный ID", http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Неверный ID")
 		return
 	}
 
@@ -125,28 +107,34 @@ func (h *Handler) UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
 		IsDone bool `json:"is_done"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "Плохой JSON", http.StatusBadRequest)
+		sendError(w, http.StatusBadRequest, "Плохой JSON")
 		return
 	}
 
-	//err = database.UpdateTaskStatus(h.Pool, id, input.IsDone)
 	err = h.Service.UpdateStatus(r.Context(), id, input.IsDone)
 	if err != nil {
-		if err == service.ErrTaskNotFound {
-			//http.Error(w, err.Error(), http.StatusNotFound) //Отдаем 404
-			sendJSONError(w, err.Error(), http.StatusNotFound) 
+		if errors.Is(err, service.ErrTaskNotFound) {
+			sendError(w, http.StatusNotFound, err.Error())
 		} else {
-			//http.Error(w, "Ошибка сервера", http.StatusInternalServerError)
-			sendJSONError(w, "Ошибка сервера", http.StatusInternalServerError) 
+			sendError(w, http.StatusInternalServerError, "Не удалось обновить статус")
 		}
 		return
 	}
-
-	w.Write([]byte("Статус обновлен"))
+	sendJSON(w, http.StatusOK, map[string]string{"message": "Статус обновлен"})
 }
 
-func sendJSONError(w http.ResponseWriter, message string, code int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+func (h *Handler) DeleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id") // достаем {id} из URL
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		sendError(w, http.StatusBadRequest, "Неверный ID")
+		return
+	}
+
+	if err := h.Service.Delete(r.Context(), id); err != nil {
+		sendError(w, http.StatusInternalServerError, "Ошибка удаления")
+		return
+	}
+	sendJSON(w, http.StatusOK, map[string]string{"message": "Удалено"})
 }
+
