@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	pb "github.com/HelenMatveevaN/todo-proj/api/proto"
+	pb "github.com/HelenMatveevaN/todo-proj/api/proto" // Путь к сгенерированным файлам
 )
 
 func main() {
@@ -18,23 +18,22 @@ func main() {
 	}
 	defer conn.Close()
 
-	client := pb.NewNotifierServiceClient(conn)
+	client := pb.NewNotifierClient(conn)
 
 	// 2. Формируем запрос
-	req := &pb.SendNotificationRequest{
-		UserId:      "user-123",
-		Message:     "Тестовое уведомление из TODO сервиса!",
-		Destination: "test@example.com",
+	req := &pb.NotificationRequest{
+		TaskTitle: "Новая задача из проекта",
+		Message:   "Проверьте список дел на сегодня",
 	}
 
 	// 3. Отправляем запрос
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	res, err := client.Send(ctx, req)
+	res, err := client.SendNotification(ctx, req)
 	if err != nil {
 		log.Fatalf("ошибка при отправке: %v", err)
 	}
 
-	log.Printf("Ответ от сервера: %v (Success: %v)", res.NotificationId, res.Success)
+	log.Printf("Ответ от сервера: %v", res.Success)
 }
