@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	pb "/api/proto"
+	pb "github.com/HelenMatveevaN/todo-proj/api/proto"
 )
 
 func main() {
