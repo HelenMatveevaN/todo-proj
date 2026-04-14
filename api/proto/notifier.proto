@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package notifier;
+
+//этот путь скажет генератору, куда положить go-код
+option go_package = "./gen/notifier;notifier";
+
+service Notifier {
+	//Метод, который будет вызывать todo-сервис
+	rpc SendNotification (NotificationRequest) returns (NotificationResponse);
+}
+
+message NotificationRequest {
+	string task_title = 1;
+	string message = 2;
+}
+
+message NotificationResponse {
+	bool success = 1;
+}
