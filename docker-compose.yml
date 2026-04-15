@@ -23,20 +23,29 @@ services:
       ports:
         - "50051:50051"
 
+    todo_redis:
+      image: redis:7-alpine
+      container_name: todo_redis
+      restart: always
+      ports:
+        - "6379:6379"
+
     app:
       env_file:
         - .env
       build: .
       container_name: todo_app
-      ports:
-        - "8080:8080"           # Открывает "окно" в контейнер
-      restart: always
+      restart: always      
       depends_on:
         - todo_db
         - notifier # Ждем запуска нотификатора
+        - todo_redis # Ждем и Redis тоже
       environment:
         - DATABASE_URL=postgres://postgres:password@todo_db:5432/todo_db
-        - NOTIFIER_ADDR=notifier:50051 
+        - NOTIFIER_ADDR=notifier:50051
+        - REDIS_HOST=todo_redis:6379 # Прокидываем адрес Redis приложению
+      ports:
+        - "8080:8080"           # Открывает "окно" в контейнер
 
 volumes:
   postgres_data:

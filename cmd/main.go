@@ -16,7 +16,7 @@ import (
 	"todo-proj/internal/config"
 
 	"github.com/jackc/pgx/v4/pgxpool"
-	//"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -31,8 +31,22 @@ func main() {
 	dbpool := setupDatabase(cfg.DatabaseURL)
 	defer dbpool.Close()
 
-	// 4. Сборка слоев приложения
-	taskSvc := service.NewTaskService(dbpool)
+	// 3.1 Инициализация Redis
+	rdb := redis.NewClient(&redis.Options{
+		Addr: cfg.RedisHost,
+	})
+
+	// 3.2 Проверка Redis (Ping)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		slog.Error("Redis не доступен", "err", err)
+	} else {
+		slog.Info("успешное подключение к Redis")
+	}
+	cancel()	
+
+	// 4. Передаем rdb в сервис
+	taskSvc := service.NewTaskService(dbpool, rdb)
 	h := &handlers.Handler{Service: taskSvc}
 	router := handlers.NewRouter(h) // Все middleware уже внутри этого роутера!
 

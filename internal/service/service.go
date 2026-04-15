@@ -2,14 +2,20 @@ package service
 
 import (
 	"context"
+	"encoding/json" // Добавили для работы с JSON в Redis
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"todo-proj/internal/database"
 	"todo-proj/internal/models"
 )
+
+// Ключ для хранения списка задач в Redis
+const tasksCacheKey = "tasks_list"
 
 var (
 	ErrTitleTooEmpty = errors.New("название задачи не может быть пустым")
@@ -41,50 +47,74 @@ type TaskService interface {
 //реализация сервиса
 type taskService struct {
 	pool *pgxpool.Pool
+	rdb *redis.Client
 }
 
-func NewTaskService(pool *pgxpool.Pool) TaskService {
-	return &taskService{pool: pool}
+// Обновленный конструктор
+func NewTaskService(pool *pgxpool.Pool, rdb *redis.Client) TaskService {
+	return &taskService{
+		pool: pool,
+		rdb: rdb,
+	}
+}
+
+func (s *taskService) List(ctx context.Context) ([]models.Task, error) {
+	// 1. Пробуем получить данные из Redis
+	val, err := s.rdb.Get(ctx, tasksCacheKey).Result()
+	if err == nil {
+		var tasks []models.Task
+		if err := json.Unmarshal([]byte(val), &tasks); err == nil {
+			return tasks, nil // Успешно вернули из кеша
+		}
+	}
+
+	// 2. Если в кеше нет — идем в БД
+	tasks, err := database.GetTasks(s.pool)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Сохраняем результат в Redis на 5 минут
+	data, _ := json.Marshal(tasks)
+	s.rdb.Set(ctx, tasksCacheKey, data, 5*time.Minute)
+
+	return tasks, nil	
 }
 
 func (s *taskService) Create(ctx context.Context, title string) (models.Task, error) {
 	if err := ValidateTask(title); err != nil {
 		return models.Task{}, err
 	}	
-	if title == "" {
-		return models.Task{}, ErrTitleTooEmpty
+	if strings.TrimSpace(title) == "" {
+		return models.Task{}, ErrTaskInvalidTitle
 	}
-	// Пример для ErrTaskInvalidTitle (например, если в названии только пробелы)
-    if strings.TrimSpace(title) == "" {
-        return models.Task{}, ErrTaskInvalidTitle
-    }
 	if len(title) > 100 {
 		return models.Task{}, ErrTitleTooLong
 	}
 
-	return database.CreateTask(s.pool, title)
-}
-
-func (s *taskService) List(ctx context.Context) ([]models.Task, error) {
-	return database.GetTasks(s.pool)
+	task, err := database.CreateTask(s.pool, title)
+	if err == nil {
+		// ИНВАЛИДАЦИЯ: удаляем старый список из кеша
+		s.rdb.Del(ctx, tasksCacheKey)
+	}
+	return task, err
 }
 
 func (s *taskService) Delete(ctx context.Context, id int) error {
 	err := database.DeleteTask(s.pool, id)
-	if err != nil {
-		//здесь можно добавить логик: если ошибка от БД говорит "не найдено"
-		//но пока просто пробрасываем
-		return err
+	if err == nil {
+		s.rdb.Del(ctx, tasksCacheKey)
 	}
-	return nil
+	return err
 }
 
 func (s *taskService) UpdateStatus(ctx context.Context, id int, isDone bool) error {
 	err := database.UpdateTaskStatus(s.pool, id, isDone)
 	if err != nil {
-		// Если в ошибке есть текст про "не найдена", возвращаем ErrTaskNotFound
 		return ErrTaskNotFound
 	}
+	// Успешно обновили — сбрасываем кеш
+	s.rdb.Del(ctx, tasksCacheKey)
 	return nil
 }
 

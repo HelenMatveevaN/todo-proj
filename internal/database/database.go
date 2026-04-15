@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"todo-proj/internal/models"	
+	"todo-proj/internal/models"
 )
 
 var ErrEmptyTitle = errors.New("название задачи не может быть пустым")
