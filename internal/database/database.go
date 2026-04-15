@@ -26,34 +26,44 @@ func CreateTask(db *pgxpool.Pool, title string) (models.Task, error) {
         "INSERT INTO tasks (title) VALUES ($1) RETURNING id, title, is_done, created_at", 
         title).Scan(&t.ID, &t.Title, &t.IsDone, &t.CreatedAt)
 
-	// 2. "Звоним" в сервис уведомлений
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	defer cancel()
+	if err != nil {
+		return t, fmt.Errorf("ошибка вставки в БД: %w", err)
+	}
 
+	// Выносим адрес в переменную
 	addr := os.Getenv("NOTIFIER_ADDR")
 	if addr == "" {
 	    addr = "notifier:50051" // Значение по умолчанию для Docker
 	}
 
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		slog.Error("не удалось связаться с Notifier", "error", err)
-		return t, nil
-	}
-	defer conn.Close()
+	// Запускаем отправку уведомления в фоне
+	go func(taskTitle string, taskID int) {	
+		// Создаем отдельный контекст для фоновой задачи, 
+		// чтобы defer cancel() из родительской функции его не убил
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
 
-	client := pb.NewNotifierClient(conn)
-	_, err = client.SendNotification(ctx, &pb.NotificationRequest{
-		TaskTitle: title,
-		Message:   "Ура! Новая задача создана в системе.",
-	})
+		conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		if err != nil {
+			slog.Error("не удалось установить соединение с Notifier", "error", err)
+			return
+		}
+		defer conn.Close()
 
-	if err != nil {
-		slog.Error("ошибка отправки gRPC уведомления", "error", err)
-	} else {
-		slog.Info("задача создана и уведомление отправлено", "id", t.ID)
-	}
+		client := pb.NewNotifierClient(conn)
+		_, err = client.SendNotification(ctx, &pb.NotificationRequest{
+			TaskTitle: taskTitle,
+			Message:   "Ура! Новая задача создана в системе.",
+		})
 
+		if err != nil {
+			slog.Error("ошибка отправки gRPC уведомления", "error", err)
+		} else {
+			slog.Info("задача создана и уведомление отправлено", "id", taskID)
+		}
+	}(t.Title, t.ID) // Пробрасываем данные в горутину
+
+	slog.Info("задача создана", "id", t.ID)
     return t, nil
 }
 
@@ -119,7 +129,7 @@ func GetTasksByStatus(db *pgxpool.Pool, IsDone bool) ([]models.Task, error) {
 	var tasks []models.Task
 	for rows.Next() {
 		var t models.Task
-		if err := rows.Scan(&t.ID, &t.Title, &t.IsDone); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.IsDone, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
