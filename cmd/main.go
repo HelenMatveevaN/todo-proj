@@ -43,10 +43,18 @@ func main() {
 	} else {
 		slog.Info("успешное подключение к Redis")
 	}
-	cancel()	
+	cancel()
 
-	// 4. Передаем rdb в сервис
-	taskSvc := service.NewTaskService(dbpool, rdb)
+	// 3.3 Инициализация RabbitMQ через новый пакет
+    rabbit, err := service.NewRabbitMQ(cfg.RabbitURL, "tasks_events")
+    if err != nil {
+        log.Fatalf("не удалось инициализировать RabbitMQ: %v", err)
+    }
+    defer rabbit.Close()	
+
+	// 4. Передаем обернутый брокер в сервис
+	taskSvc := service.NewTaskService(dbpool, rdb, rabbit)
+
 	h := &handlers.Handler{Service: taskSvc}
 	router := handlers.NewRouter(h) // Все middleware уже внутри этого роутера!
 

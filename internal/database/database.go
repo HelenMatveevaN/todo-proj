@@ -9,7 +9,7 @@ import (
 	"time"     
 
 	"github.com/jackc/pgx/v4/pgxpool"
-	pb "github.com/HelenMatveevaN/todo-proj/api/proto" // Путь к сгенерированным файлам
+	pb "todo-proj/api/proto"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

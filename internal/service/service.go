@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json" // Добавили для работы с JSON в Redis
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -48,13 +49,15 @@ type TaskService interface {
 type taskService struct {
 	pool *pgxpool.Pool
 	rdb *redis.Client
+	broker *RabbitMQ
 }
 
 // Обновленный конструктор
-func NewTaskService(pool *pgxpool.Pool, rdb *redis.Client) TaskService {
+func NewTaskService(pool *pgxpool.Pool, rdb *redis.Client, b *RabbitMQ) TaskService {
 	return &taskService{
 		pool: pool,
 		rdb: rdb,
+		broker: b,
 	}
 }
 
@@ -93,11 +96,21 @@ func (s *taskService) Create(ctx context.Context, title string) (models.Task, er
 	}
 
 	task, err := database.CreateTask(s.pool, title)
-	if err == nil {
-		// ИНВАЛИДАЦИЯ: удаляем старый список из кеша
-		s.rdb.Del(ctx, tasksCacheKey)
-	}
-	return task, err
+	if err != nil {
+		return models.Task{}, err
+	}	
+
+	// 1. Инвалидация кеша Redis
+	s.rdb.Del(ctx, tasksCacheKey)
+
+	// 2. Отправка через новый пакет
+	go func() {
+		if err := s.broker.PublishTaskCreated(context.Background(), task); err != nil {
+			slog.Error("ошибка публикации события", "err", err)
+		}
+	}()    
+
+	return task, nil
 }
 
 func (s *taskService) Delete(ctx context.Context, id int) error {

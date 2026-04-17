@@ -30,6 +30,14 @@ services:
       ports:
         - "6379:6379"
 
+    rabbitmq:
+      image: rabbitmq:3-management-alpine
+      container_name: rabbitmq
+      restart: always
+      ports:
+        - "5672:5672"   # Порт для связи (AMQP)
+        - "15672:15672" # Админка (логин/пароль: guest/guest)
+
     app:
       env_file:
         - .env
@@ -40,10 +48,13 @@ services:
         - todo_db
         - notifier # Ждем запуска нотификатора
         - todo_redis # Ждем и Redis тоже
+        - rabbitmq # ТЕПЕРЬ ЖДЕМ И RABBIT
       environment:
         - DATABASE_URL=postgres://postgres:password@todo_db:5432/todo_db
         - NOTIFIER_ADDR=notifier:50051
         - REDIS_HOST=todo_redis:6379 # Прокидываем адрес Redis приложению
+        # ДОБАВЛЯЕМ ПЕРЕМЕННУЮ ДЛЯ RABBIT
+        - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
       ports:
         - "8080:8080"           # Открывает "окно" в контейнер
 

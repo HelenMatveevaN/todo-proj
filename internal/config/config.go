@@ -12,6 +12,7 @@ type Config struct {
 	Env         string `env:"ENV" env-default:"local"`
 	DatabaseURL string `env:"DATABASE_URL" env-required:"true"`
 	RedisHost   string `env:"REDIS_HOST" env-default:"localhost:6379"`
+	RabbitURL   string `env:"RABBIT_URL" env-default:"amqp://guest:guest@todo_rabbitmq:5672/"`
 	IsDebug bool `env:"IS_DEBUG" env-default:"false"`
 	HTTP	struct {
 			Port string `env:"HTTP_PORT" env-default:":8080"`

@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	pb "github.com/HelenMatveevaN/todo-proj/api/proto" // Путь к сгенерированным файлам
+	pb "todo-proj/api/proto" // Путь к сгенерированным файлам
 )
 
 func main() {
